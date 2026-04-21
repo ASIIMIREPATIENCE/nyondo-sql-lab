@@ -1,0 +1,20 @@
+ASIIMRE PATIENCE - Student ID - Tue Apr 21 21:51:59 RTZST 2026
+ 1: Build the Database
+
+Full setup.js code:
+[PASTE YOUR ENTIRE setup.js CODE HERE]
+
+CREATE TABLE statement:
+CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    price REAL NOT NULL
+)
+
+INSERT statement:
+INSERT INTO products (name, description, price) VALUES (?, ?, ?)
+[Then the 5 product arrays]
+
+SELECT * output:
+[PASTE THE TABLE OUTPUT FROM TERMINAL]
