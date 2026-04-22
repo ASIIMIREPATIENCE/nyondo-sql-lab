@@ -1,10 +1,28 @@
-ASIIMRE PATIENCE - Student ID - Tue Apr 21 21:51:59 RTZST 2026
- 1: Build the Database
+Name: Asiimire Patience
+Date: 22 April 2026
 
-Full setup.js code:
-[PASTE YOUR ENTIRE setup.js CODE HERE]
 
-CREATE TABLE statement:
+TASK 1 - Building the Database
+
+
+How I did it:
+I created setup.js using better-sqlite3. First I installed the package using npm install better-sqlite3. 
+Then I wrote code to create a database called nyondo_stock.db with a products table containing id, name, 
+description, and price columns. I used INTEGER PRIMARY KEY AUTOINCREMENT for id, TEXT NOT NULL for name, 
+TEXT for description, and REAL NOT NULL for price.
+
+For the users table (needed for Task 3), I added id, username, password, and role columns. I inserted 
+three users: admin, fatuma, and wasswa.
+
+I inserted 5 products using a transaction with prepared statements. The products are Cement (bag) at 35,000 UGX,
+Iron Sheet 3m at 110,000 UGX, Paint 5L at 60,000 UGX, Nails 1kg at 12,000 UGX, and Timber 2x4 at 25,000 UGX.
+
+To verify it worked, I ran SELECT * FROM products and SELECT * FROM users.
+
+Commands I ran:
+node setup.js
+
+The CREATE TABLE statement I used:
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -12,9 +30,153 @@ CREATE TABLE IF NOT EXISTS products (
     price REAL NOT NULL
 )
 
-INSERT statement:
+The INSERT command I used (through prepared statements):
 INSERT INTO products (name, description, price) VALUES (?, ?, ?)
-[Then the 5 product arrays]
 
-SELECT * output:
-[PASTE THE TABLE OUTPUT FROM TERMINAL]
+Output from SELECT * FROM products:
+id=1, name='Cement (bag)', description='Portland cement 50kg bag', price=35000
+id=2, name='Iron Sheet 3m', description='Gauge 30 roofing sheet 3m long', price=110000
+id=3, name='Paint 5L', description='Exterior wall paint white 5L', price=60000
+id=4, name='Nails 1kg', description='Common wire nails 1kg pack', price=12000
+id=5, name='Timber 2x4', description='Pine timber plank 2x4 per metre', price=25000
+
+Screenshot saved as: screenshots/task1.png
+
+
+TASK 2 - Querying the Database
+
+
+How I did it:
+I created queries.js and wrote 7 different SELECT queries to practice before doing the injection attacks.
+
+Query A: SELECT * FROM products - this returned all columns for all 5 products
+Query B: SELECT name, price FROM products - this only showed product names and their prices
+Query C: SELECT * FROM products WHERE id = 3 - this showed only the Paint 5L product
+Query D: SELECT * FROM products WHERE name LIKE '%sheet%' - this found the Iron Sheet product
+Query E: SELECT * FROM products ORDER BY price DESC - this sorted from most expensive (Iron Sheet) to cheapest (Nails)
+Query F: SELECT * FROM products ORDER BY price DESC LIMIT 2 - this showed only the top 2: Iron Sheet and Paint
+Query G: UPDATE products SET price = 38000 WHERE id = 1 - this changed Cement price, then I ran SELECT * to confirm
+
+Commands I ran:
+node queries.js
+
+Each query output is recorded below:
+
+A: All 5 products with all columns
+B: Name and price columns only
+C: {id:3, name:"Paint 5L", description:"Exterior wall paint white 5L", price:60000}
+D: Iron Sheet 3m only
+E: Iron Sheet(110k), Paint(60k), Cement(35k), Timber(25k), Nails(12k)
+F: Iron Sheet(110k), Paint(60k)
+G: Cement price changed from 35000 to 38000
+
+Screenshot saved as: screenshots/task2.png
+
+
+TASK 3 - SQL Injection Attacks
+
+
+How I did it:
+I created vulnerable.js with two functions: searchProduct() and login(). Both functions are VULNERABLE 
+because they use template literals (backticks with ${variable}) to build SQL queries. This means user 
+input gets inserted directly into the SQL string.
+
+Then I ran 4 attacks by calling these functions with malicious payloads.
+
+Attack 1 - Dump all products:
+I called searchProduct("' OR 1=1--")
+What happened: The OR 1=1 made the WHERE clause always true, so every product came back.
+The actual query built was: SELECT * FROM products WHERE name LIKE '%' OR 1=1--%'
+Result: All 5 products returned (attacker sees all cost prices)
+
+Attack 2 - Login bypass:
+I called login("admin'--", "anything")
+What happened: The -- commented out the password check, so only username mattered.
+The actual query: SELECT * FROM users WHERE username='admin'--' AND password='anything'
+Result: Admin user returned without needing password
+
+Attack 3 - Always true login:
+I called login("' OR '1'='1", "' OR '1'='1")
+What happened: OR '1'='1' is always true, so the WHERE clause matches every row.
+Result: First user in database (admin) returned
+
+Attack 4 - UNION attack to steal passwords:
+I called searchProduct("' UNION SELECT id, username, password, role FROM users--")
+What happened: UNION combined product search with users table, exposing all credentials.
+Result: All 5 products PLUS all 3 users with their passwords came back
+
+Commands I ran:
+node vulnerable.js
+
+Screenshots saved as:
+screenshots/task3_attack1.png
+screenshots/task3_attack2.png
+screenshots/task3_attack3.png
+screenshots/task3_attack4.png
+
+TASK 4 - Fixing with Parameterised Queries
+
+
+How I did it:
+I created secure.js and rewrote the same functions but this time using ? placeholders instead of template literals.
+
+For searchProductSafe(), I wrote:
+const query = `SELECT * FROM products WHERE name LIKE '%' || ? || '%'`
+const rows = db.prepare(query).all(name)
+
+For loginSafe(), I wrote:
+const query = `SELECT * FROM users WHERE username = ? AND password = ?`
+const row = db.prepare(query).get(username, password)
+
+The ? placeholders tell the database "put the user input here as DATA, not as SQL code".
+
+When I tested the same attacks:
+- searchProductSafe("' OR 1=1--") returned [] because it searched for that literal string
+- searchProductSafe("' UNION SELECT...") returned [] because UNION is now just text to search for
+- loginSafe("admin'--", "anything") returned null because username "admin'--" doesn't exist
+- loginSafe("' OR '1'='1", "' OR '1'='1") returned null because those literal strings aren't in the database
+
+Commands I ran:
+node secure.js
+
+Why parameterised queries prevent injection (in my own words):
+When I use template literals like `WHERE name LIKE '%${name}%'`, the user's input becomes 
+part of the SQL command. If they type a quote or semicolon, the database thinks that's 
+part of the SQL syntax. With parameterised queries using ? placeholders, the database 
+compiles the SQL structure FIRST. Then it knows exactly where the user data goes, and 
+it treats whatever the user types as plain data - never as executable code. Even if 
+someone types "' OR 1=1--", the database just sees it as a weird string to search for, 
+not as SQL commands. The quotes and dashes lose their special meaning.
+
+Screenshot saved as: screenshots/task4.png
+
+TASK 5 - Adding Input Validation
+
+
+How I did it:
+I updated secure.js to add validation functions that check input BEFORE it even reaches the database.
+
+I created these validation rules:
+- validateName(): checks string, at least 2 characters, no < > or ; symbols
+- validateUsername(): checks string, no spaces, not empty
+- validatePassword(): checks string, at least 6 characters
+
+In each function, I check validation first. If validation fails, I print an error and return [] or null without touching the database.
+
+Test results I got:
+
+1. searchProductSafe('cement') -> PASSED validation, returned Cement product
+2. searchProductSafe('') -> FAILED (empty string), returned []
+3. searchProductSafe('<script>') -> FAILED (has < > chars), returned []
+4. loginSafe('admin', 'admin123') -> PASSED validation, login successful
+5. loginSafe('admin', 'ab') -> FAILED (password too short), returned null
+6. loginSafe('ad min', 'pass123') -> FAILED (space in username), returned null
+
+Commands I ran:
+node secure.js
+
+Why validation matters:
+Parameterised queries protect the database from SQL injection, but input validation protects the whole application. For example, someone could still put HTML tags like <script> into the database which might cause XSS attacks later. Validation stops bad data before it ever gets stored. This is called "defense in depth" - multiple layers of security.
+
+Screenshot saved as: screenshots/task5.png
+
